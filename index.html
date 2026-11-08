@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fridge Freezer Inventory</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg: #eef2f6;
+    --ink: #1d2733;
+    --muted: #6b7785;
+    --body: #fbfcfd;
+    --edge: #c9d3de;
+    --fridge-in: #eaf6fb;
+    --freezer-in: #e6eefc;
+    --shelf: #ffffff;
+    --accent: #2a7de1;
+    --danger: #d64545;
+    --ok: #2f9e62;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171d; --ink: #e6edf3; --muted: #93a1b0; --body: #1b222b;
+      --edge: #33404d; --fridge-in: #17262f; --freezer-in: #18213a; --shelf: #222c37;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    max-width: 1140px; margin: 0 auto; padding: 18px 16px 6px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+  }
+  h1 { font-size: 20px; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; }
+  #search {
+    flex: 1 1 220px; max-width: 320px; padding: 9px 12px; border-radius: 10px;
+    border: 1px solid var(--edge); background: var(--body); color: var(--ink); font-size: 15px;
+  }
+  #status { font-size: 12px; color: var(--muted); min-height: 16px; max-width: 1140px; margin: 0 auto; padding: 0 16px; }
+
+  /* ---------- Appliance ---------- */
+  .kitchen {
+    max-width: 1140px; margin: 10px auto 40px; padding: 0 16px;
+    display: grid; grid-template-columns: 2fr 1fr; gap: 18px; align-items: stretch;
+  }
+  @media (max-width: 860px) { .kitchen { grid-template-columns: 1fr; max-width: 760px; } }
+  .appliance { display: flex; flex-direction: column; }
+  .deep-cab { background: var(--freezer-in); flex: 1; display: flex; flex-direction: column; gap: 10px; }
+  .deep-cab .bucket { flex: 1; }
+  .appliance {
+    padding: 14px;
+    background: var(--body); border: 2px solid var(--edge); border-radius: 26px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.08);
+  }
+  .section-label {
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+    margin: 2px 6px 8px; display: flex; justify-content: space-between;
+  }
+  .cabinet { border-radius: 16px; padding: 10px; border: 1px solid var(--edge); }
+  .fridge { background: var(--fridge-in); display: grid; grid-template-columns: 130px 1fr 130px; gap: 10px; }
+  .fridge > *, .crispers > *, .freezer > *, .bucket { min-width: 0; }
+  .b-name { overflow-wrap: anywhere; }
+  .b-name .short { display: none; }
+  @media (max-width: 520px) { .b-name .full { display: none; } .b-name .short { display: inline; } }
+  @media (max-width: 520px) {
+    .kitchen { padding: 0 8px; gap: 12px; }
+    .appliance { padding: 8px; border-radius: 20px; }
+    .fridge { grid-template-columns: minmax(0, 88px) minmax(0, 1fr) minmax(0, 88px); gap: 6px; padding: 6px; }
+    .door-col { padding-left: 6px; gap: 6px; } .door-col.left { padding-left: 0; padding-right: 6px; }
+    .crispers, .main-col, .freezer { gap: 6px; }
+    .bucket { padding: 7px; } .b-name { font-size: 13px; overflow-wrap: normal; } .bucket.door { padding: 6px; } .bucket.door .b-name { font-size: 12px; }
+    .b-head { flex-direction: column; align-items: flex-start; gap: 2px; }
+    .chip { font-size: 11px; }
+  }
+  .freezer { background: var(--freezer-in); display: grid; gap: 10px; margin-top: 4px;
+    grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, auto); grid-auto-flow: column; }
+  .divider { height: 14px; display: flex; align-items: center; justify-content: center; }
+  .divider span { width: 70px; height: 5px; border-radius: 3px; background: var(--edge); }
+  .main-col { display: grid; gap: 10px; }
+  .door-col {
+    display: grid; gap: 10px; padding-left: 10px; border-left: 3px dashed var(--edge);
+  }
+  .door-col.left { padding-left: 0; border-left: none; padding-right: 10px; border-right: 3px dashed var(--edge); }
+  .crispers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .bucket {
+    position: relative; text-align: left; cursor: pointer; color: var(--ink);
+    background: var(--shelf); border: 1px solid var(--edge); border-radius: var(--radius);
+    padding: 10px 12px; min-height: 84px; font: inherit;
+    transition: transform .08s ease, box-shadow .15s ease, border-color .15s;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .bucket:hover { box-shadow: 0 4px 14px rgba(0,0,0,.10); border-color: var(--accent); }
+  .bucket:active { transform: scale(.985); }
+  .bucket:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .bucket.shelf { border-bottom: 5px solid var(--edge); }
+  .bucket.drawer { border-radius: 12px 12px 18px 18px; min-height: 96px; }
+  .bucket.drawer::after {
+    content: ""; position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+    width: 56px; height: 6px; border-radius: 4px; background: var(--edge);
+  }
+  .bucket.freezer-drawer { min-height: 96px; }
+  .bucket.door { min-height: 72px; border-radius: 10px 10px 16px 16px; }
+  .bucket.match { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(42,125,225,.25); }
+  .bucket.dim { opacity: .4; }
+  .b-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .b-name { font-weight: 600; font-size: 14px; }
+  .b-count {
+    font-size: 12px; color: var(--muted); background: var(--bg); border-radius: 999px; padding: 1px 8px;
+    white-space: nowrap;
+  }
+  .b-items { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 10px; }
+  .chip {
+    font-size: 12px; background: var(--bg); border-radius: 8px; padding: 2px 7px; white-space: nowrap;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  }
+  .empty-note { font-size: 12px; color: var(--muted); font-style: italic; }
+
+  /* ---------- Modal ---------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(10,15,20,.45); display: none;
+    align-items: flex-end; justify-content: center; z-index: 10; padding: 0;
+  }
+  .overlay.open { display: flex; }
+  @media (min-width: 600px) { .overlay { align-items: center; padding: 20px; } }
+  .modal {
+    background: var(--body); color: var(--ink); width: 100%; max-width: 480px;
+    max-height: 88vh; display: flex; flex-direction: column;
+    border-radius: 20px 20px 0 0; box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    animation: pop .16s ease-out;
+  }
+  @media (min-width: 600px) { .modal { border-radius: 20px; } }
+  @keyframes pop { from { transform: translateY(16px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+  .m-head { padding: 16px 18px 10px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--edge); }
+  .m-title {
+    flex: 1; font-size: 18px; font-weight: 700; border: 1px solid transparent; background: transparent;
+    color: var(--ink); border-radius: 8px; padding: 4px 6px; font-family: inherit; min-width: 0;
+  }
+  .m-title:hover, .m-title:focus { border-color: var(--edge); outline: none; }
+  .icon-btn {
+    border: none; background: var(--bg); color: var(--ink); width: 36px; height: 36px; border-radius: 10px;
+    font-size: 18px; cursor: pointer; flex: none;
+  }
+  .m-body { padding: 8px 18px; overflow-y: auto; flex: 1; }
+  .item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--edge);
+  }
+  .item:last-child { border-bottom: none; }
+  .item .emoji { font-size: 22px; width: 28px; text-align: center; }
+  .item .info { flex: 1; min-width: 0; }
+  .item .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .meta { font-size: 12px; color: var(--muted); }
+  .item.zero .nm { color: var(--muted); text-decoration: line-through; }
+  .qty { display: flex; align-items: center; gap: 6px; }
+  .qty button {
+    width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--edge);
+    background: var(--shelf); color: var(--ink); font-size: 20px; cursor: pointer; line-height: 1;
+  }
+  .qty button.minus:hover { border-color: var(--danger); color: var(--danger); }
+  .qty button.plus:hover { border-color: var(--ok); color: var(--ok); }
+  .qty .n { min-width: 26px; text-align: center; font-weight: 700; font-size: 17px; }
+  .del { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px; }
+  .del:hover { color: var(--danger); }
+  .cart { border: 1px solid var(--edge); background: var(--shelf); border-radius: 10px; width: 36px; height: 36px;
+    cursor: pointer; font-size: 16px; flex: none; }
+  .cart:hover { border-color: var(--accent); }
+  .cart.on { background: var(--accent); border-color: var(--accent); }
+  .ub { border: 1px solid var(--edge); background: var(--shelf); border-radius: 10px; width: 36px; height: 36px;
+    cursor: pointer; font-size: 16px; flex: none; }
+  .ub:hover, .ub.open { border-color: var(--accent); }
+  .ub.set { background: #fff4d6; border-color: #e0b24a; }
+  @media (prefers-color-scheme: dark) { .ub.set { background: #3a3018; } }
+  .picker { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 12px 38px; border-bottom: 1px solid var(--edge); }
+  .picker .lbl { width: 100%; font-size: 12px; color: var(--muted); }
+  .picker button {
+    border: 1px solid var(--edge); background: var(--shelf); color: var(--ink); border-radius: 999px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  .picker button:hover { border-color: var(--accent); }
+  .picker button.clear { color: var(--danger); }
+  .due-red { color: var(--danger) !important; font-weight: 600; }
+  .due-amber { color: #b7791f !important; font-weight: 600; }
+  .chip.soon { box-shadow: inset 0 0 0 1.5px var(--danger); }
+  @media (max-width: 520px) {
+    .item { flex-wrap: wrap; row-gap: 6px; }
+    .item .info { flex-basis: calc(100% - 40px); }
+    .item .qty { margin-left: 38px; margin-right: auto; }
+    .picker { padding-left: 0; }
+  }
+
+  /* ---------- Shopping list ---------- */
+  .lists {
+    max-width: 1108px; margin: 0 auto 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start;
+  }
+  @media (max-width: 860px) { .lists { grid-template-columns: 1fr; max-width: 728px; } }
+  @media (max-width: 520px) { .lists { gap: 12px; } }
+  .shopping {
+    padding: 16px 18px; min-width: 0;
+    background: var(--body); border: 2px solid var(--edge); border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.06);
+  }
+  .shop-wrap { padding: 0 16px; }
+  @media (max-width: 520px) { .shop-wrap { padding: 0 8px; } .shopping { padding: 12px; } }
+  .shop-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .shop-head h2 { font-size: 17px; margin: 0; flex: 1; }
+  .shop-head button {
+    border: 1px solid var(--edge); background: var(--shelf); color: var(--ink); border-radius: 999px;
+    padding: 5px 12px; font-size: 13px; cursor: pointer;
+  }
+  .shop-head button:hover { border-color: var(--accent); }
+  .shop-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .shop-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px;
+    background: var(--shelf); border: 1px solid var(--edge); min-width: 0;
+  }
+  .shop-item label { flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; min-width: 0; }
+  .shop-item input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ok); flex: none; }
+  .shop-item .s-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shop-item .s-from { font-size: 11px; color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shop-item.done .s-name { text-decoration: line-through; color: var(--muted); }
+  .ub-list { list-style: none; margin: 0; padding: 0; counter-reset: ub; }
+  .ub-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px; border-radius: 12px;
+    background: var(--shelf); border: 1px solid var(--edge); cursor: pointer; width: 100%; text-align: left;
+    font: inherit; color: var(--ink);
+  }
+  .ub-row:hover { border-color: var(--accent); }
+  .ub-row .em { font-size: 20px; width: 26px; text-align: center; flex: none; }
+  .ub-row .mid { flex: 1; min-width: 0; }
+  .ub-row .t, .ub-row .w { display: block; }
+  .ub-row .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ub-row .w { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ub-row .d { text-align: right; font-size: 12px; color: var(--muted); flex: none; }
+  .ub-row .d b { display: block; font-size: 13px; }
+  .ub-row.red { border-left: 5px solid var(--danger); }
+  .ub-row.amber { border-left: 5px solid #e0a33a; }
+  .shop-empty { color: var(--muted); font-size: 14px; padding: 6px 0 12px; }
+  .readonly-shop .shop-item input, .readonly-shop .shop-item .del, .readonly-shop .add-row, .readonly-shop .shop-head button.w { display: none; }
+  .none { color: var(--muted); text-align: center; padding: 22px 0; }
+  .m-foot { padding: 12px 18px 18px; border-top: 1px solid var(--edge); }
+  .add-row { display: flex; gap: 8px; }
+  .add-row input {
+    padding: 10px 12px; border-radius: 10px; border: 1px solid var(--edge);
+    background: var(--shelf); color: var(--ink); font-size: 15px; min-width: 0;
+  }
+  .add-row input[name=name] { flex: 1; }
+  .add-row input[name=qty] { width: 64px; }
+  .add-row button {
+    padding: 10px 16px; border: none; border-radius: 10px; background: var(--accent); color: #fff;
+    font-weight: 600; font-size: 15px; cursor: pointer;
+  }
+  .quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .quick button {
+    border: 1px solid var(--edge); background: var(--shelf); color: var(--ink); border-radius: 999px;
+    padding: 4px 10px; font-size: 13px; cursor: pointer;
+  }
+  .quick button:hover { border-color: var(--accent); }
+  .readonly .qty button, .readonly .del, .readonly .cart, .readonly .m-foot { display: none; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 30px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🧊 Fridge Freezer</h1>
+    <div class="sub" id="summary">Loading…</div>
+  </div>
+  <input id="search" type="search" placeholder="Find an item… (e.g. peas)" aria-label="Search items">
+</header>
+<div id="status"></div>
+
+<main class="kitchen" id="kitchen">
+<section class="appliance" aria-label="Fridge freezer">
+  <div class="section-label"><span>Left door</span><span>Fridge</span><span>Right door</span></div>
+  <div class="cabinet fridge">
+    <div class="door-col left" id="fridge-door-left"></div>
+    <div class="main-col" id="fridge-main"></div>
+    <div class="door-col" id="fridge-door"></div>
+  </div>
+  <div class="divider"><span></span></div>
+  <div class="section-label"><span>Freezer</span></div>
+  <div class="cabinet freezer" id="freezer"></div>
+</section>
+<section class="appliance" aria-label="Deep freezer">
+  <div class="section-label"><span>Deep freezer</span></div>
+  <div class="cabinet deep-cab" id="deep"></div>
+</section>
+</main>
+<div class="shop-wrap"><div class="lists">
+<section class="shopping" id="shopping" aria-label="Shopping list">
+  <div class="shop-head">
+    <h2>🛒 Shopping list <span class="sub" id="shop-count"></span></h2>
+    <button type="button" id="shop-copy">Copy list</button>
+    <button type="button" class="w" id="shop-clear">Clear ticked</button>
+  </div>
+  <div class="shop-list" id="shop-list"></div>
+  <form class="add-row" id="shop-form" autocomplete="off">
+    <input name="name" placeholder="Add to shopping list…" maxlength="60" required>
+    <button type="submit">Add</button>
+  </form>
+</section>
+<section class="shopping" id="useby" aria-label="Use by approaching">
+  <div class="shop-head"><h2>⏰ Use by approaching <span class="sub" id="ub-count"></span></h2></div>
+  <ol class="ub-list" id="ub-list"></ol>
+</section>
+</div></div>
+<footer>Tap any shelf or drawer to see what's inside and add or remove items.</footer>
+
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="m-title">
+  <div class="modal">
+    <div class="m-head">
+      <input class="m-title" id="m-title" aria-label="Compartment name" maxlength="40">
+      <button class="icon-btn" id="m-close" aria-label="Close">✕</button>
+    </div>
+    <div class="m-body" id="m-body"></div>
+    <div class="m-foot">
+      <form class="add-row" id="add-form" autocomplete="off">
+        <input name="name" placeholder="Add an item…" maxlength="60" required>
+        <input name="qty" type="number" min="1" max="999" value="1" aria-label="Quantity">
+        <button type="submit">Add</button>
+      </form>
+      <div class="quick" id="quick"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- Layout ----------
+const COMPARTMENTS = [
+  { id: "shelf1",  name: "Top shelf",      area: "main",    kind: "shelf" },
+  { id: "shelf2",  name: "Middle shelf",   area: "main",    kind: "shelf" },
+  { id: "shelf3",  name: "Bottom shelf",   area: "main",    kind: "shelf" },
+  { id: "crispL",  name: "Salad drawer L", area: "crisper", kind: "drawer" },
+  { id: "crispR",  name: "Salad drawer R", area: "crisper", kind: "drawer" },
+  { id: "doorL1",  name: "Left door top", short: "Top",    area: "doorL", kind: "door" },
+  { id: "doorL2",  name: "Left door middle", short: "Middle", area: "doorL", kind: "door" },
+  { id: "doorL3",  name: "Left door bottom", short: "Bottom", area: "doorL", kind: "door" },
+  { id: "door1",   name: "Right door top", short: "Top",    area: "door", kind: "door" },
+  { id: "door2",   name: "Right door middle", short: "Middle", area: "door", kind: "door" },
+  { id: "door3",   name: "Right door bottom", short: "Bottom", area: "door", kind: "door" },
+  // Freezer: left column 1–3, right column 4–6 (laid out top-to-bottom per column)
+  { id: "frz1",    name: "Freezer left 1",  area: "freezer", kind: "freezer-drawer" },
+  { id: "frz2",    name: "Freezer left 2",  area: "freezer", kind: "freezer-drawer" },
+  { id: "frz3",    name: "Freezer left 3",  area: "freezer", kind: "freezer-drawer" },
+  { id: "frz4",    name: "Freezer right 1", area: "freezer", kind: "freezer-drawer" },
+  { id: "frz5",    name: "Freezer right 2", area: "freezer", kind: "freezer-drawer" },
+  { id: "frz6",    name: "Freezer right 3", area: "freezer", kind: "freezer-drawer" },
+  // Separate deep freezer: 5 full-width drawers
+  { id: "deep1",   name: "Deep freezer 1", area: "deep", kind: "freezer-drawer" },
+  { id: "deep2",   name: "Deep freezer 2", area: "deep", kind: "freezer-drawer" },
+  { id: "deep3",   name: "Deep freezer 3", area: "deep", kind: "freezer-drawer" },
+  { id: "deep4",   name: "Deep freezer 4", area: "deep", kind: "freezer-drawer" },
+  { id: "deep5",   name: "Deep freezer 5", area: "deep", kind: "freezer-drawer" },
+];
+const QUICK = {
+  main: ["Milk", "Cheese", "Yogurt", "Eggs", "Butter", "Leftovers", "Ham"],
+  crisper: ["Lettuce", "Carrots", "Peppers", "Cucumber", "Tomatoes", "Apples", "Broccoli"],
+  door: ["Ketchup", "Mayo", "Mustard", "Juice", "Jam", "Sauce"],
+  freezer: ["Peas", "Chips", "Ice cream", "Chicken", "Mince", "Pizza", "Fish fingers", "Ice"],
+};
+const EMOJI = [
+  [/milk/i,"🥛"],[/chees/i,"🧀"],[/egg/i,"🥚"],[/butter/i,"🧈"],[/yog/i,"🥣"],[/apple/i,"🍎"],
+  [/banana/i,"🍌"],[/grape/i,"🍇"],[/berr|strawb/i,"🍓"],[/lemon|lime/i,"🍋"],[/orange/i,"🍊"],
+  [/carrot/i,"🥕"],[/lettuce|salad|spinach/i,"🥬"],[/broccoli/i,"🥦"],[/pepper/i,"🫑"],
+  [/cucumber/i,"🥒"],[/tomato/i,"🍅"],[/potato|chip|fries/i,"🍟"],[/corn/i,"🌽"],[/pea\b|peas/i,"🫛"],
+  [/onion/i,"🧅"],[/garlic/i,"🧄"],[/mushroom/i,"🍄"],[/avocado/i,"🥑"],
+  [/chicken|wing/i,"🍗"],[/beef|steak|mince|burger/i,"🥩"],[/bacon|ham|pork|sausage/i,"🥓"],
+  [/fish|salmon|prawn|shrimp|cod/i,"🐟"],[/pizza/i,"🍕"],[/ice ?cream|gelato/i,"🍨"],
+  [/ice\b|ice cube/i,"🧊"],[/bread|bagel|loaf/i,"🍞"],[/juice/i,"🧃"],[/beer/i,"🍺"],[/wine/i,"🍷"],
+  [/water|soda|cola|drink/i,"🥤"],[/ketchup|sauce|mayo|mustard|dressing/i,"🫙"],[/jam|honey/i,"🍯"],
+  [/cake|dessert/i,"🍰"],[/soup|stew|chilli|curry|leftover/i,"🍲"],[/pasta|lasagn/i,"🍝"],
+];
+const emojiFor = n => (EMOJI.find(([re]) => re.test(n)) || [, "📦"])[1];
+
+// ---------- State ----------
+// state = { names: {compId: customName}, items: { compId: [ {id,name,qty,added} ] } }
+let state = { names: {}, items: {}, shopping: [] };
+// shopping: [ {id, name, from (compartment id or ""), done} ]
+let canWrite = true;
+let openId = null;
+let store = null; // { save(state) }
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const uid = () => Math.random().toString(36).slice(2, 10);
+const nameOf = c => (state.names && state.names[c.id]) || c.name;
+const itemsOf = id => (state.items && state.items[id]) || [];
+
+function sanitize(raw) {
+  const out = { names: {}, items: {}, shopping: [] };
+  if (!raw || typeof raw !== "object") return out;
+  const ids = new Set(COMPARTMENTS.map(c => c.id));
+  if (raw.names && typeof raw.names === "object")
+    for (const [k, v] of Object.entries(raw.names))
+      if (ids.has(k) && typeof v === "string") out.names[k] = v.slice(0, 40);
+  if (raw.items && typeof raw.items === "object")
+    for (const [k, arr] of Object.entries(raw.items)) {
+      if (!ids.has(k) || !Array.isArray(arr)) continue;
+      out.items[k] = arr.filter(i => i && typeof i.name === "string").map(i => ({
+        id: String(i.id || uid()), name: i.name.slice(0, 60),
+        qty: Math.max(0, Math.min(999, Math.round(Number(i.qty) || 0))),
+        added: typeof i.added === "string" ? i.added : "",
+        useBy: typeof i.useBy === "string" && /^\d{4}-\d{2}-\d{2}$/.test(i.useBy) ? i.useBy : "",
+      }));
+    }
+  if (Array.isArray(raw.shopping))
+    out.shopping = raw.shopping.filter(i => i && typeof i.name === "string").slice(0, 300).map(i => ({
+      id: String(i.id || uid()), name: i.name.slice(0, 60),
+      from: typeof i.from === "string" && ids.has(i.from) ? i.from : "", done: !!i.done,
+    }));
+  return out;
+}
+
+// ---------- Render appliance ----------
+function bucketHTML(c, q) {
+  const items = itemsOf(c.id).filter(i => i.qty > 0);
+  const total = items.reduce((s, i) => s + i.qty, 0);
+  const hit = q && items.some(i => i.name.toLowerCase().includes(q));
+  const cls = ["bucket", c.kind, q ? (hit ? "match" : "dim") : ""].join(" ");
+  const shown = items.slice(0, c.kind === "door" ? 3 : 6);
+  const chips = shown.length
+    ? shown.map(i => `<span class="chip${i.useBy && daysLeft(i.useBy) <= 2 ? " soon" : ""}">${emojiFor(i.name)} ${esc(i.name)}${i.qty > 1 ? " ×" + i.qty : ""}</span>`).join("")
+      + (items.length > shown.length ? `<span class="chip">+${items.length - shown.length} more</span>` : "")
+    : `<span class="empty-note">Empty</span>`;
+  return `<button class="${cls}" data-id="${c.id}" aria-label="${esc(nameOf(c))}, ${total} items">
+    <div class="b-head"><span class="b-name">${c.short && !state.names[c.id] ? `<span class="full">${esc(c.name)}</span><span class="short">${c.short}</span>` : esc(nameOf(c))}</span><span class="b-count">${total}</span></div>
+    <div class="b-items">${chips}</div></button>`;
+}
+
+function render() {
+  const q = $("#search").value.trim().toLowerCase();
+  const by = a => COMPARTMENTS.filter(c => c.area === a).map(c => bucketHTML(c, q)).join("");
+  $("#fridge-main").innerHTML = by("main") + `<div class="crispers">${by("crisper")}</div>`;
+  $("#fridge-door").innerHTML = by("door");
+  $("#fridge-door-left").innerHTML = by("doorL");
+  $("#freezer").innerHTML = by("freezer");
+  $("#deep").innerHTML = by("deep");
+
+  let total = 0, kinds = 0;
+  for (const c of COMPARTMENTS) for (const i of itemsOf(c.id)) if (i.qty > 0) { total += i.qty; kinds++; }
+  let sum = `${total} item${total === 1 ? "" : "s"} · ${kinds} kind${kinds === 1 ? "" : "s"}`;
+  if (q) {
+    const where = COMPARTMENTS.filter(c => itemsOf(c.id).some(i => i.qty > 0 && i.name.toLowerCase().includes(q)));
+    sum = where.length ? `“${esc(q)}” is in: ${where.map(c => esc(nameOf(c))).join(", ")}` : `No “${esc(q)}” found`;
+  }
+  $("#summary").innerHTML = sum;
+  renderShopping();
+  renderUseBy();
+  if (openId) renderModal();
+}
+
+// ---------- Modal ----------
+function openModal(id) {
+  openId = id;
+  const c = COMPARTMENTS.find(c => c.id === id);
+  $("#m-title").value = nameOf(c);
+  $("#m-title").readOnly = !canWrite;
+  const area = c.area === "doorL" ? "door" : c.area === "deep" ? "freezer" : c.area;
+  $("#quick").innerHTML = QUICK[area].map(n => `<button type="button" data-q="${esc(n)}">${emojiFor(n)} ${esc(n)}</button>`).join("");
+  $(".modal").classList.toggle("readonly", !canWrite);
+  $("#overlay").classList.add("open");
+  renderModal();
+  if (canWrite && matchMedia("(min-width: 600px)").matches) $("#add-form [name=name]").focus();
+}
+function closeModal() { pickerFor = null; openId = null; $("#overlay").classList.remove("open"); }
+
+function renderModal() {
+  const items = itemsOf(openId);
+  const meta = i => {
+    if (i.qty === 0) return "Run out";
+    if (i.useBy) { const d = daysLeft(i.useBy); return `<span class="${dueClass(d)}">Use by ${fmtDate(i.useBy)} · ${dueText(d)}</span>`; }
+    return fmt(i.added);
+  };
+  const fmt = d => { try { return d ? "Added " + new Date(d).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : ""; } catch { return ""; } };
+  $("#m-body").innerHTML = items.length ? items.map(i => `
+    <div class="item ${i.qty === 0 ? "zero" : ""}" data-item="${esc(i.id)}">
+      <span class="emoji">${emojiFor(i.name)}</span>
+      <div class="info"><div class="nm">${esc(i.name)}</div><div class="meta">${meta(i)}</div></div>
+      <div class="qty">
+        <button class="minus" data-act="-1" aria-label="Remove one ${esc(i.name)}">−</button>
+        <span class="n">${i.qty}</span>
+        <button class="plus" data-act="1" aria-label="Add one ${esc(i.name)}">+</button>
+      </div>
+      <button class="ub ${i.useBy ? "set" : ""} ${pickerFor === i.id ? "open" : ""}" data-act="ub"
+        aria-label="Set use by date for ${esc(i.name)}" aria-expanded="${pickerFor === i.id}" title="Set use by date">📅</button>
+      <button class="cart ${onList(i.name) ? "on" : ""}" data-act="cart"
+        aria-label="${onList(i.name) ? "Remove " + esc(i.name) + " from" : "Add " + esc(i.name) + " to"} shopping list"
+        title="${onList(i.name) ? "On shopping list (tap to remove)" : "Add to shopping list"}">🛒</button>
+      <button class="del" data-act="del" aria-label="Delete ${esc(i.name)}" title="Delete">🗑</button>
+    </div>${pickerFor === i.id ? `
+    <div class="picker" data-item="${esc(i.id)}">
+      <span class="lbl">Use within…</span>
+      ${USE_BY.map(([label], k) => `<button data-ub="${k}">${label}</button>`).join("")}
+      ${i.useBy ? `<button class="clear" data-ub="clear">Clear date</button>` : ""}
+    </div>` : ""}`).join("") : `<div class="none">Nothing in here yet.<br>Add something below 👇</div>`;
+}
+
+// ---------- Mutations ----------
+function mutate(fn) {
+  if (!canWrite) return;
+  fn();
+  render();
+  store && store.save(state);
+}
+function addItem(name, qty) {
+  name = name.trim(); if (!name) return;
+  qty = Math.max(1, Math.min(999, Math.round(qty) || 1));
+  mutate(() => {
+    const list = state.items[openId] = itemsOf(openId).slice();
+    const existing = list.find(i => i.name.toLowerCase() === name.toLowerCase());
+    if (existing) existing.qty = Math.min(999, existing.qty + qty);
+    else list.push({ id: uid(), name, qty, added: new Date().toISOString() });
+  });
+}
+
+$("#kitchen").addEventListener("click", e => {
+  const b = e.target.closest(".bucket"); if (b) openModal(b.dataset.id);
+});
+// ---------- Use by ----------
+let pickerFor = null; // item id whose date picker is open (UI only)
+const USE_BY = [
+  ["3 days", { d: 3 }], ["1 week", { d: 7 }], ["2 weeks", { d: 14 }], ["3 weeks", { d: 21 }],
+  ["1 month", { m: 1 }], ["3 months", { m: 3 }], ["6 months", { m: 6 }], ["1 year", { m: 12 }],
+];
+const pad = n => String(n).padStart(2, "0");
+const isoLocal = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseISO = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+function useByFrom({ d = 0, m = 0 }) {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  if (m) {
+    const day = t.getDate(); t.setDate(1); t.setMonth(t.getMonth() + m);
+    const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+    t.setDate(Math.min(day, last)); // e.g. 31 Jan + 1 month → 28/29 Feb
+  }
+  t.setDate(t.getDate() + d);
+  return isoLocal(t);
+}
+function daysLeft(iso) {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  return Math.round((parseISO(iso) - t) / 86400000);
+}
+const fmtDate = iso => { try { return parseISO(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: parseISO(iso).getFullYear() !== new Date().getFullYear() ? "numeric" : undefined }); } catch { return iso; } };
+const dueText = d => d < -1 ? `${-d} days past` : d === -1 ? "1 day past" : d === 0 ? "today" : d === 1 ? "tomorrow" : d < 14 ? `${d} days` : d < 60 ? `${Math.round(d / 7)} weeks` : d < 330 ? `${Math.round(d / 30)} months` : Math.round(d / 365) <= 1 ? "1 year" : `${Math.round(d / 365)} years`;
+const dueClass = d => d <= 2 ? "due-red" : d <= 7 ? "due-amber" : "";
+
+function renderUseBy() {
+  const rows = [];
+  for (const c of COMPARTMENTS) for (const i of itemsOf(c.id))
+    if (i.qty > 0 && i.useBy) rows.push({ c, i, d: daysLeft(i.useBy) });
+  rows.sort((a, b) => a.d - b.d || a.i.name.localeCompare(b.i.name));
+  const soon = rows.filter(r => r.d <= 7).length;
+  $("#ub-count").textContent = rows.length ? `· ${soon} within a week` : "";
+  $("#ub-list").innerHTML = rows.length ? rows.map(({ c, i, d }) => `
+    <li><button class="ub-row ${d <= 2 ? "red" : d <= 7 ? "amber" : ""}" data-open="${c.id}">
+      <span class="em">${emojiFor(i.name)}</span>
+      <span class="mid"><span class="t">${esc(i.name)}${i.qty > 1 ? " ×" + i.qty : ""}</span>
+        <span class="w">${esc(nameOf(c))}</span></span>
+      <span class="d"><b class="${dueClass(d)}">${dueText(d)}</b>${fmtDate(i.useBy)}</span>
+    </button></li>`).join("")
+    : `<div class="shop-empty">No use by dates yet. Tap 📅 next to an item in any drawer to set one.</div>`;
+}
+$("#ub-list").addEventListener("click", e => {
+  const b = e.target.closest("[data-open]"); if (b) openModal(b.dataset.open);
+});
+
+// ---------- Shopping list ----------
+const shopList = () => state.shopping || (state.shopping = []);
+const onList = name => shopList().some(s => !s.done && s.name.toLowerCase() === name.toLowerCase());
+function toggleShopping(name, from) {
+  const key = name.toLowerCase();
+  if (onList(name)) state.shopping = shopList().filter(s => s.done || s.name.toLowerCase() !== key);
+  else state.shopping = [...shopList().filter(s => s.name.toLowerCase() !== key), { id: uid(), name, from: from || "", done: false }];
+}
+function renderShopping() {
+  const list = shopList();
+  const open = list.filter(s => !s.done).length;
+  $("#shop-count").textContent = list.length ? `· ${open} to buy` : "";
+  $("#shopping").classList.toggle("readonly-shop", !canWrite);
+  const where = id => { const c = COMPARTMENTS.find(c => c.id === id); return c ? "For " + nameOf(c) : ""; };
+  const sorted = [...list.filter(s => !s.done), ...list.filter(s => s.done)];
+  $("#shop-list").innerHTML = sorted.length ? sorted.map(s => `
+    <div class="shop-item ${s.done ? "done" : ""}" data-sid="${esc(s.id)}">
+      <label><input type="checkbox" ${s.done ? "checked" : ""} aria-label="Bought ${esc(s.name)}">
+        <span style="min-width:0"><span class="s-name">${emojiFor(s.name)} ${esc(s.name)}</span>
+        <span class="s-from">${esc(where(s.from))}</span></span></label>
+      <button class="del" data-sact="del" aria-label="Remove ${esc(s.name)}" title="Remove">✕</button>
+    </div>`).join("")
+    : `<div class="shop-empty">Nothing on the list. Tap 🛒 next to an item in any drawer, or type below.</div>`;
+  $("#shop-clear").style.display = list.some(s => s.done) ? "" : "none";
+}
+$("#shop-list").addEventListener("change", e => {
+  if (e.target.type !== "checkbox") return;
+  const id = e.target.closest(".shop-item").dataset.sid;
+  mutate(() => { state.shopping = shopList().map(s => s.id === id ? { ...s, done: e.target.checked } : s); });
+});
+$("#shop-list").addEventListener("click", e => {
+  const b = e.target.closest("button[data-sact=del]"); if (!b) return;
+  const id = b.closest(".shop-item").dataset.sid;
+  mutate(() => { state.shopping = shopList().filter(s => s.id !== id); });
+});
+$("#shop-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const name = e.target.name.value.trim(); if (!name) return;
+  mutate(() => { if (!onList(name)) toggleShopping(name, ""); });
+  e.target.name.value = "";
+});
+$("#shop-clear").addEventListener("click", () => mutate(() => { state.shopping = shopList().filter(s => !s.done); }));
+$("#shop-copy").addEventListener("click", async e => {
+  const text = shopList().filter(s => !s.done).map(s => "- " + s.name).join("\n") || "(empty)";
+  const btn = e.currentTarget;
+  try { await navigator.clipboard.writeText("Shopping list\n" + text); btn.textContent = "Copied ✓"; }
+  catch { btn.textContent = "Couldn't copy"; }
+  setTimeout(() => btn.textContent = "Copy list", 1500);
+});
+
+$("#m-close").onclick = closeModal;
+$("#overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && openId) closeModal(); });
+$("#search").addEventListener("input", render);
+
+$("#m-body").addEventListener("click", e => {
+  const ubBtn = e.target.closest("button[data-ub]");
+  if (ubBtn) {
+    const itemId = ubBtn.closest(".picker").dataset.item;
+    const k = ubBtn.dataset.ub;
+    pickerFor = null;
+    mutate(() => {
+      state.items[openId] = itemsOf(openId).map(i => i.id !== itemId ? i
+        : { ...i, useBy: k === "clear" ? "" : useByFrom(USE_BY[Number(k)][1]) });
+    });
+    return;
+  }
+  const btn = e.target.closest("button[data-act]"); if (!btn) return;
+  const itemId = btn.closest(".item").dataset.item;
+  const act = btn.dataset.act;
+  if (act === "ub") { pickerFor = pickerFor === itemId ? null : itemId; renderModal(); return; }
+  mutate(() => {
+    let list = itemsOf(openId).map(i => ({ ...i }));
+    if (act === "cart") {
+      const it = list.find(i => i.id === itemId); if (!it) return;
+      toggleShopping(it.name, openId); return;
+    }
+    if (act === "del") list = list.filter(i => i.id !== itemId);
+    else { const it = list.find(i => i.id === itemId); if (it) it.qty = Math.max(0, Math.min(999, it.qty + Number(act))); }
+    state.items[openId] = list;
+  });
+});
+$("#add-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const f = e.target;
+  addItem(f.name.value, Number(f.qty.value));
+  f.name.value = ""; f.qty.value = 1;
+});
+$("#quick").addEventListener("click", e => {
+  const b = e.target.closest("button[data-q]"); if (b) addItem(b.dataset.q, 1);
+});
+$("#m-title").addEventListener("change", e => {
+  const v = e.target.value.trim().slice(0, 40);
+  const c = COMPARTMENTS.find(c => c.id === openId);
+  mutate(() => {
+    state.names = { ...state.names };
+    if (!v || v === c.name) delete state.names[openId]; else state.names[openId] = v;
+  });
+  e.target.value = nameOf(c);
+});
+
+// ---------- Persistence ----------
+// Shared storage: one row in a Supabase table (see supabase-setup.sql and config.js).
+// If config.js isn't filled in, the app saves on this device only.
+const setStatus = t => { $("#status").textContent = t || ""; };
+
+function localStore() {
+  const KEY = "fridge-inventory-v1";
+  try { state = sanitize(JSON.parse(localStorage.getItem(KEY) || "null")); } catch {}
+  render();
+  return { save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} } };
+}
+
+function supabaseStore(cfg) {
+  const baseUrl = cfg.url.replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, "");
+  const client = window.supabase.createClient(baseUrl, cfg.anonKey);
+  const TABLE = "fridge_state", ROW = cfg.household || "main";
+  let writing = false, pending = null, timer = null, lastSaved = null;
+
+  function apply(data) {
+    if (pending || writing) return; // our own edit in flight; don't clobber it
+    const next = sanitize(data);
+    const json = JSON.stringify(next);
+    if (json === lastSaved) return;
+    state = next; lastSaved = json; render();
+  }
+  async function load() {
+    const { data, error } = await client.from(TABLE).select("data").eq("id", ROW).maybeSingle();
+    if (error) { setStatus("Couldn't load saved data — check your connection."); return; }
+    setStatus("");
+    apply(data ? data.data : null);
+  }
+  async function flush() {
+    if (writing || !pending) return;
+    const body = pending; pending = null; writing = true;
+    const json = JSON.stringify(body);
+    try {
+      if (json !== lastSaved) {
+        const { error } = await client.from(TABLE)
+          .upsert({ id: ROW, data: body, updated_at: new Date().toISOString() });
+        if (error) throw error;
+        lastSaved = json;
+      }
+      setStatus("");
+    } catch (err) {
+      pending = pending || body;
+      setStatus("Couldn't save — retrying…");
+      setTimeout(flush, 2000 + Math.random() * 2000);
+    } finally { writing = false; if (pending && !timer) flush(); }
+  }
+
+  load();
+  // Live updates from other phones/browsers
+  client.channel("fridge-" + ROW)
+    .on("postgres_changes", { event: "*", schema: "public", table: TABLE, filter: "id=eq." + ROW },
+        payload => { if (payload.new && payload.new.data) apply(payload.new.data); })
+    .subscribe();
+  // Safety net: refresh when the tab comes back into view, and every 30s
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+  setInterval(() => { if (!document.hidden) load(); }, 30000);
+
+  return {
+    save(s) {
+      pending = JSON.parse(JSON.stringify(s));
+      clearTimeout(timer);
+      timer = setTimeout(() => { timer = null; flush(); }, 350); // batch rapid +/− taps
+    },
+  };
+}
+
+render();
+(() => {
+  const cfg = window.FRIDGE_CONFIG || {};
+  const configured = cfg.url && cfg.anonKey && !/YOUR_/.test(cfg.url + cfg.anonKey);
+  if (configured && window.supabase) {
+    store = supabaseStore(cfg);
+  } else {
+    store = localStore();
+    setStatus(configured ? "Couldn't reach the database — saving on this device only."
+                         : "Saving on this device only (database not set up yet — see README).");
+  }
+})();
+</script>
+</body>
+</html>
