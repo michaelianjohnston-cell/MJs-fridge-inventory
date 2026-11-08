@@ -245,8 +245,12 @@
     background: #6e4524;
   }
   .meals-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .meals-head { display: grid !important; grid-template-columns: 1fr auto 1fr; }
+  .meals-btns button { white-space: nowrap; }
+  @media (max-width: 520px) { .meals-btns .wide { display: none; } .meals-head h2 { font-size: 24px; } }
+  .meals-btns { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
   .meals-head h2 {
-    flex: 1; margin: 0; font-weight: 400; font-size: 28px; letter-spacing: .02em;
+    text-align: center; white-space: nowrap; margin: 0; font-weight: 400; font-size: 28px; letter-spacing: .02em;
     text-shadow: 0 0 1px rgba(255,255,255,.6);
   }
   .meals-head button {
@@ -342,7 +346,7 @@
   </div>
   <div class="tools">
     <input id="search" type="search" placeholder="Find an item… (e.g. peas)" aria-label="Search items">
-    <button type="button" id="meals-open" aria-haspopup="dialog">🍽️ Meals for this week</button>
+    <button type="button" id="meals-open" aria-haspopup="dialog">🍽️ Meal Planner</button>
   </div>
 </header>
 <div id="status"></div>
@@ -387,9 +391,12 @@
 <div class="overlay center" id="meals-overlay" role="dialog" aria-modal="true">
 <section class="meals" id="meals" aria-labelledby="meals-title">
   <div class="meals-head">
-    <h2 id="meals-title">Meals for this week</h2>
-    <button type="button" id="meals-clear">Wipe board</button>
-    <button type="button" class="meals-x" id="meals-close" aria-label="Close meals">✕</button>
+    <span></span>
+    <h2 id="meals-title">Meal Planner</h2>
+    <div class="meals-btns">
+    <button type="button" id="meals-clear">Wipe<span class="wide"> board</span></button>
+    <button type="button" class="meals-x" id="meals-close" aria-label="Close meal planner">✕</button>
+    </div>
   </div>
   <div class="board" id="board"></div>
 </section>
@@ -676,12 +683,12 @@ let wipeTimer = null;
 $("#meals-clear").addEventListener("click", e => {
   const b = e.currentTarget;
   if (!b.classList.contains("confirm")) {
-    b.classList.add("confirm"); b.textContent = "Tap again to wipe";
+    b.classList.add("confirm"); b.textContent = "Sure?";
     clearTimeout(wipeTimer);
-    wipeTimer = setTimeout(() => { b.classList.remove("confirm"); b.textContent = "Wipe board"; }, 3000);
+    wipeTimer = setTimeout(() => { b.classList.remove("confirm"); b.innerHTML = 'Wipe<span class="wide"> board</span>'; }, 3000);
     return;
   }
-  clearTimeout(wipeTimer); b.classList.remove("confirm"); b.textContent = "Wipe board";
+  clearTimeout(wipeTimer); b.classList.remove("confirm"); b.innerHTML = 'Wipe<span class="wide"> board</span>';
   mutate(() => { state.meals = {}; });
 });
 
