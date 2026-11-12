@@ -58,20 +58,38 @@
   /* ---------- Appliance ---------- */
   .kitchen {
     max-width: 1640px; margin: 10px auto 30px; padding: 0 16px;
-    display: grid; grid-template-columns: 2fr 1fr 1.3fr; gap: 18px; align-items: stretch;
+    display: grid; grid-template-columns: 2fr 1fr 1fr 1.3fr; gap: 18px; align-items: stretch;
   }
   .side { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-  @media (max-width: 1279px) {
-    .kitchen { grid-template-columns: 2fr 1fr; max-width: 1180px; }
+  @media (max-width: 1439px) {
+    .kitchen { grid-template-columns: 2fr 1fr 1fr; max-width: 1280px; }
     .side { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
   }
-  @media (max-width: 860px) {
+  @media (max-width: 1000px) {
+    .kitchen { grid-template-columns: 1fr 1fr; max-width: 900px; }
+    .kitchen > .appliance:first-child { grid-column: 1 / -1; }
+  }
+  @media (max-width: 640px) {
     .kitchen { grid-template-columns: 1fr; max-width: 760px; }
     .side { grid-template-columns: 1fr; }
   }
   .appliance { display: flex; flex-direction: column; }
   .deep-cab { background: var(--freezer-in); flex: 1; display: flex; flex-direction: column; gap: 10px; }
   .deep-cab .bucket { flex: 1; }
+  /* Pantry: wooden cupboard with one door */
+  .pantry-cab {
+    flex: 1; display: flex; flex-direction: column; gap: 10px; position: relative;
+    background: linear-gradient(90deg, #d9b98c, #e6caa0 50%, #d9b98c); border-color: #b48a5a;
+    padding-left: 22px;
+  }
+  .pantry-cab::before { /* door hinge edge + handle */
+    content: ""; position: absolute; left: 7px; top: 50%; width: 6px; height: 46px; margin-top: -23px;
+    border-radius: 3px; background: #8a5a32; box-shadow: 0 1px 2px rgba(0,0,0,.3);
+  }
+  @media (prefers-color-scheme: dark) {
+    .pantry-cab { background: linear-gradient(90deg, #4a3a28, #57452f 50%, #4a3a28); border-color: #6e5638; }
+  }
+  .pantry-cab .bucket { flex: 1; }
   .appliance {
     padding: 14px;
     background: var(--body); border: 2px solid var(--edge); border-radius: 26px;
@@ -367,6 +385,10 @@
   <div class="section-label"><span>Deep freezer</span></div>
   <div class="cabinet deep-cab" id="deep"></div>
 </section>
+<section class="appliance" aria-label="Pantry">
+  <div class="section-label"><span>Pantry</span></div>
+  <div class="cabinet pantry-cab" id="pantry"></div>
+</section>
 <div class="side">
 <section class="shopping" id="shopping" aria-label="Shopping list">
   <div class="shop-head">
@@ -447,14 +469,23 @@ const COMPARTMENTS = [
   { id: "deep3",   name: "Deep freezer 3", area: "deep", kind: "freezer-drawer" },
   { id: "deep4",   name: "Deep freezer 4", area: "deep", kind: "freezer-drawer" },
   { id: "deep5",   name: "Deep freezer 5", area: "deep", kind: "freezer-drawer" },
+  // Pantry: one door, 4 shelves
+  { id: "pan1",    name: "Pantry shelf 1", area: "pantry", kind: "shelf" },
+  { id: "pan2",    name: "Pantry shelf 2", area: "pantry", kind: "shelf" },
+  { id: "pan3",    name: "Pantry shelf 3", area: "pantry", kind: "shelf" },
+  { id: "pan4",    name: "Pantry shelf 4", area: "pantry", kind: "shelf" },
 ];
 const QUICK = {
   main: ["Milk", "Cheese", "Yogurt", "Eggs", "Butter", "Leftovers", "Ham"],
   crisper: ["Lettuce", "Carrots", "Peppers", "Cucumber", "Tomatoes", "Apples", "Broccoli"],
   door: ["Ketchup", "Mayo", "Mustard", "Juice", "Jam", "Sauce"],
+  pantry: ["Pasta", "Rice", "Cereal", "Tinned tomatoes", "Baked beans", "Flour", "Sugar", "Bread", "Crisps", "Tea", "Coffee"],
   freezer: ["Peas", "Chips", "Ice cream", "Chicken", "Mince", "Pizza", "Fish fingers", "Ice"],
 };
 const EMOJI = [
+  [/peanut/i,"🥜"],[/rice/i,"🍚"],[/cereal|oat|muesli|granola/i,"🥣"],[/tin|tinned|canned|baked beans|beans/i,"🥫"],
+  [/flour|sugar|salt|spice/i,"🧂"],[/crisps/i,"🥔"],[/biscuit|cookie/i,"🍪"],[/choc/i,"🍫"],[/coffee/i,"☕"],
+  [/\btea\b/i,"🍵"],[/noodle/i,"🍜"],[/oil/i,"🫒"],
   [/milk/i,"🥛"],[/chees/i,"🧀"],[/egg/i,"🥚"],[/butter/i,"🧈"],[/yog/i,"🥣"],[/apple/i,"🍎"],
   [/banana/i,"🍌"],[/grape/i,"🍇"],[/berr|strawb/i,"🍓"],[/lemon|lime/i,"🍋"],[/orange/i,"🍊"],
   [/carrot/i,"🥕"],[/lettuce|salad|spinach/i,"🥬"],[/broccoli/i,"🥦"],[/pepper/i,"🫑"],
@@ -541,6 +572,7 @@ function render() {
   $("#fridge-door-left").innerHTML = by("doorL");
   $("#freezer").innerHTML = by("freezer");
   $("#deep").innerHTML = by("deep");
+  $("#pantry").innerHTML = by("pantry");
 
   let total = 0, kinds = 0;
   for (const c of COMPARTMENTS) for (const i of itemsOf(c.id)) if (i.qty > 0) { total += i.qty; kinds++; }
